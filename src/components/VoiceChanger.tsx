@@ -1,10 +1,10 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Play, Pause, Square, Settings, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 
 interface VoiceChangerProps {
   apiKey: string;
@@ -24,6 +24,7 @@ const VoiceChanger: React.FC<VoiceChangerProps> = ({ apiKey }) => {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const { toast } = useToast();
 
   const voices = [
     { id: '9BWtsMINqrJLrRacOk9x', name: 'Aria - Natural Female' },
@@ -95,8 +96,14 @@ const VoiceChanger: React.FC<VoiceChangerProps> = ({ apiKey }) => {
       
       mediaRecorderRef.current.start(100);
       setIsRecording(true);
+      console.log('Recording started');
     } catch (error) {
       console.error('Error starting recording:', error);
+      toast({
+        title: "Recording Error",
+        description: "Failed to access microphone. Please check permissions.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -109,33 +116,41 @@ const VoiceChanger: React.FC<VoiceChangerProps> = ({ apiKey }) => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      console.log('Recording stopped');
     }
   };
 
   const processVoice = async () => {
-    if (audioChunksRef.current.length === 0) return;
+    if (audioChunksRef.current.length === 0) {
+      toast({
+        title: "No Recording",
+        description: "Please record some audio first.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setIsProcessing(true);
+    console.log('Processing voice transformation...');
     
     try {
       const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+      console.log('Audio blob size:', audioBlob.size);
+      
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
-      formData.append('model_id', 'eleven_multilingual_v2');
-      formData.append('voice_settings', JSON.stringify({
-        stability: 0.5,
-        similarity_boost: 0.8,
-        style: 0.5,
-        use_speaker_boost: true
-      }));
-
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${selectedVoice}`, {
+      formData.append('model_id', 'eleven_english_sts_v2');
+      
+      // Use the speech-to-speech endpoint instead of text-to-speech
+      const response = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/${selectedVoice}`, {
         method: 'POST',
         headers: {
           'xi-api-key': apiKey,
         },
         body: formData
       });
+
+      console.log('API response status:', response.status);
 
       if (response.ok) {
         const audioBuffer = await response.arrayBuffer();
@@ -148,9 +163,27 @@ const VoiceChanger: React.FC<VoiceChangerProps> = ({ apiKey }) => {
         setIsPlaying(true);
         
         audio.onended = () => setIsPlaying(false);
+        
+        toast({
+          title: "Voice Transformed!",
+          description: "Your voice has been successfully transformed.",
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('API Error:', errorText);
+        toast({
+          title: "Transformation Failed",
+          description: "Failed to transform voice. Please try again.",
+          variant: "destructive"
+        });
       }
     } catch (error) {
       console.error('Error processing voice:', error);
+      toast({
+        title: "Processing Error",
+        description: "An error occurred while processing your voice.",
+        variant: "destructive"
+      });
     } finally {
       setIsProcessing(false);
     }
