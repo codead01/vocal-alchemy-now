@@ -85,8 +85,11 @@ const VoiceChanger: React.FC<VoiceChangerProps> = ({ apiKey }) => {
 
   const startRealTimeVoiceChange = async () => {
     try {
-      // Create a signed URL for the conversation
-      const response = await fetch(`https://api.elevenlabs.io/v1/convai/conversation/get_signed_url`, {
+      // For now, we'll use a default agent ID - users will need to create their own agent
+      const defaultAgentId = 'your-agent-id-here';
+      
+      // Create a signed URL for the conversation with agent_id parameter
+      const response = await fetch(`https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${defaultAgentId}`, {
         method: 'GET',
         headers: {
           'xi-api-key': apiKey,
@@ -94,16 +97,25 @@ const VoiceChanger: React.FC<VoiceChangerProps> = ({ apiKey }) => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get signed URL');
+        const errorData = await response.json();
+        console.error('API Error:', errorData);
+        throw new Error(`Failed to get signed URL: ${response.status}`);
       }
 
       const data = await response.json();
-      await conversation.startSession({ url: data.signed_url });
+      await conversation.startSession({ 
+        authorization: `Bearer ${apiKey}`,
+        overrides: {
+          tts: {
+            voiceId: selectedVoice
+          }
+        }
+      });
     } catch (error) {
       console.error('Error starting real-time voice change:', error);
       toast({
-        title: "Startup Error",
-        description: "Failed to start real-time voice transformation. Please check your API key.",
+        title: "Setup Required",
+        description: "Please create an agent in ElevenLabs dashboard first, then update the agent ID in the code.",
         variant: "destructive"
       });
     }
@@ -239,6 +251,19 @@ const VoiceChanger: React.FC<VoiceChangerProps> = ({ apiKey }) => {
           <div className="text-gray-400">
             Real-time Voice Transformation
           </div>
+        </div>
+      </Card>
+
+      {/* Setup Instructions */}
+      <Card className="p-4 bg-amber-900/20 border-amber-500/30">
+        <div className="text-amber-200 text-sm">
+          <p className="font-semibold mb-2">Setup Required:</p>
+          <p>To use real-time voice transformation, you need to:</p>
+          <ol className="list-decimal list-inside mt-2 space-y-1">
+            <li>Create a conversational AI agent in your ElevenLabs dashboard</li>
+            <li>Copy the agent ID and replace 'your-agent-id-here' in the code</li>
+            <li>Configure the agent with your preferred voice and settings</li>
+          </ol>
         </div>
       </Card>
     </div>
